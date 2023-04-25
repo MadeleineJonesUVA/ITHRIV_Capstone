@@ -10,3 +10,5 @@ This repository contains the code used for the Equity in COVID-19 Patient Care c
 - README_pipeline.pdf: README file for pipeline script
 - pipeline_execution.py: python script of the pipeline executed on data from the University of Virginia Health System
 - README_pipeline_execution.pdf: README file for the pipeline execution script
+- Analysis_UVA.Rmd: R Markdown file for GEE Modeling and Figure Generation
+- README_Analysis.pdf: README file for the analysis RMD file
