@@ -1,0 +1,426 @@
+---
+title: "Analysis_UVA"
+output: html_notebook
+---
+
+Creating the GLM model:
+```{r}
+MultiVar_HospAfterED <- function(All_ED_df) {
+
+library(geepack)
+library(broom)
+library(dplyr)
+# Turns all categorical or binary predictors into factor type data
+All_ED_df$race_ethnicity <- as.factor(All_ED_df$race_ethnicity)
+All_ED_df$age_at_covid <- as.numeric(All_ED_df$age_at_covid)
+#should be gender_concept_name
+All_ED_df$sex <- as.factor(All_ED_df$sex)
+All_ED_df$DiabetesComplicated_before_or_day_of_covid_indicator <- as.factor(All_ED_df$DiabetesComplicated_before_or_day_of_covid_indicator)
+#All_ED_df$ASTHMA_before_covid_indicator <- as.factor(All_ED_df$ASTHMA_before_covid_indicator)
+All_ED_df$HIVINFECTION_before_or_day_of_covid_indicator <- as.factor(All_ED_df$HIVINFECTION_before_or_day_of_covid_indicator)
+All_ED_df$CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator <- as.factor(All_ED_df$CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator)
+All_ED_df$MALIGNANTCANCER_before_or_day_of_covid_indicator <- as.factor(All_ED_df$MALIGNANTCANCER_before_or_day_of_covid_indicator)
+#All_ED_df$end_stage_renal_disease_observation_before_covid_indicator <- as.factor(All_ED_df$end_stage_renal_disease_observation_before_covid_indicator)
+All_ED_df$OBESITY_before_or_day_of_covid_indicator <- as.factor(All_ED_df$OBESITY_before_or_day_of_covid_indicator)
+All_ED_df$CHRONICLUNGDISEASE_before_or_day_of_covid_indicator <- as.factor(All_ED_df$CHRONICLUNGDISEASE_before_or_day_of_covid_indicator)
+#All_ED_df$data_partner_id <- as.factor(All_ED_df$data_partner_id)
+#All_ED_df$REMDISIVIR_during_covid_hospitalization_indicator <- as.factor(All_ED_df$REMDISIVIR_during_covid_hospitalization_indicator)
+
+# Sets white NH as the reference group for race/ethnicity variable
+All_ED_df$race_ethnicity <- relevel(All_ED_df$race_ethnicity, ref="White Non-Hispanic")
+#All_ED_df$data_partner_id <- as.factor(All_ED_df$data_partner_id)
+
+# Multivar GEE Regression (x=race/ethnicity, age, sex, diabetes, asthma, HIV, CHF, cancer, end stage renal disease, obesity, and chronic lung disease, y=hospitalization within 30 days of ED)
+#the original response variable was ED_then_Hospitalized_within_30_days
+gee_model <- geeglm(ED_then_Immediately_Hospitalized ~ race_ethnicity + age_at_covid + sex + DiabetesComplicated_before_or_day_of_covid_indicator + HIVINFECTION_before_or_day_of_covid_indicator + CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator + MALIGNANTCANCER_before_or_day_of_covid_indicator + OBESITY_before_or_day_of_covid_indicator +  CHRONICLUNGDISEASE_before_or_day_of_covid_indicator, data = All_ED_df, id = person_id, family = binomial, corstr = "independence")
+
+# Summary of the regression
+print(summary(gee_model))
+
+## Prints out odds ratios and 95% CI
+#print(exp(cbind(OR = coef(gee_model), confint(gee_model))))
+
+# Create table of model results
+# Gives the regression output as a table
+mod_tbl <- broom::tidy(gee_model, conf.int = TRUE, exponentiate = TRUE)
+#mod_eval <- broom::glance(gee_model)
+#print(mod_eval)
+mod_tbl <- mod_tbl %>% rename(OR = estimate)
+
+return(mod_tbl)
+
+}
+```
+UVA Data tagged temporally modeling:
+```{r}
+#this is where the Patient Final Table is read in
+N3C_tags = read.csv("Filtered_Patient_Final_Table_S1_N3C_Tags (4).csv")
+```
+
+```{r}
+model1 <- MultiVar_HospAfterED(N3C_tags)
+```
+UVA Data tagged with Principal Diagnosis modeling:
+```{r}
+UVA_tags = read.csv("Filtered_Patient_Final_Table_S1_UVA_Tags (3).csv")
+model1_2 <- MultiVar_HospAfterED(UVA_tags)
+```
+
+```{r}
+EDCohort_S1_ForrestPlot <- function(EDCohort_S1_HospAfterED) {
+    
+library(tidyverse)
+library(ggplot2)
+
+df_full = EDCohort_S1_HospAfterED
+
+# Does some cleaning of the dataframe
+df_full <- df_full %>% 
+    select(-statistic, -std.error) %>%
+    mutate(`Pval_Signif`=ifelse(p.value<0.05, "Significant", "Non-Significant")) %>%
+    mutate(term=ifelse(term=="race_ethnicityAsian Non-Hispanic", "Asian NH", term)) %>%
+    mutate(term=ifelse(term=="race_ethnicityBlack or African American Non-Hispanic", "Black/AA NH", term)) %>%
+    mutate(term=ifelse(term=="race_ethnicityHispanic or Latino Any Race", "Hispanic/Latino", term)) %>%
+    mutate(term=ifelse(term=="age_at_covid", "Age", term)) %>%
+    mutate(term=ifelse(term=="sexMALE", "Sex (Male)", term)) %>%
+    mutate(term=ifelse(term=="DiabetesComplicated_before_or_day_of_covid_indicator1", "Diabetes (Complicated)", term)) %>%
+#    mutate(term=ifelse(term=="ASTHMA_before_or_day_of_covid_indicator1", "Asthma", term)) %>%
+    mutate(term=ifelse(term=="HIVINFECTION_before_or_day_of_covid_indicator1", "HIV Infection", term)) %>%
+    mutate(term=ifelse(term=="CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator1", "Congestive Heart Failure", term)) %>%
+    mutate(term=ifelse(term=="MALIGNANTCANCER_before_or_day_of_covid_indicator1", "Malignant Cancer", term)) %>%
+#    mutate(term=ifelse(term=="end_stage_renal_disease_observation_before_or_day_of_covid_indicator1", "End Stage Renal Disease", term)) %>%
+    mutate(term=ifelse(term=="OBESITY_before_or_day_of_covid_indicator1", "Obesity", term)) %>%
+    mutate(term=ifelse(term=="CHRONICLUNGDISEASE_before_or_day_of_covid_indicator1", "Chronic Lung Disease", term))
+
+# Shorter df for the forest plot: comment out first line for shortened forrest plot (without comorb), comment out second line for full forrest plot (with comorb); not relevant in the S1 models with no SDoH
+df = df_full
+#df = df_full[2:15, ]
+
+# Creates color scheme for p value significance
+SigCols <- c(`Non-Significant`="skyblue2", `Significant`="orange2")
+
+# Creates forest plot of OR values
+forest_plot <- ggplot(data=df, aes(y=term, x=OR, xmin=conf.low, xmax=conf.high, color=Pval_Signif)) + geom_point() + geom_errorbarh(height=.1) + scale_color_manual(values=SigCols) + labs(x='Odds Ratio (OR)', y = 'Variable', color='p-Value Significance (< .05)') + geom_vline(xintercept=1, color='black', linetype='dashed', alpha=.5) + theme_classic()+coord_cartesian(xlim=c(0, 3))
+
+#print(forest_plot)
+
+# Rename df column [old way: arrange(desc(abs((1-OR))))]
+df_full = df_full %>%
+    arrange(desc(OR))
+
+return(forest_plot)
+
+}
+```
+
+```{r}
+plot1 = EDCohort_S1_ForrestPlot(model1)
+plot1 +theme(axis.text=element_text(size=12),axis.title=element_text(size=14),legend.text=element_text(size=12),legend.title=element_text(size=12, face="bold"),legend.position = "top")
+```
+```{r}
+plot1 = EDCohort_S1_ForrestPlot(model1_2)
+plot1 +theme(axis.text=element_text(size=12),axis.title=element_text(size=14),legend.text=element_text(size=12),legend.title=element_text(size=12, face="bold"),legend.position = "top")
+```
+```{r}
+plot1 = EDCohort_S1_ForrestPlot(model1_2)
+plot1 + labs(title="ED Cohort (UVA tagged) & Hosp. after ED: ORs by Predictor")
+```
+ED Outcomes for the two UVA Cohorts
+```{r}
+ED_OutcomeCounts <- function(HI_ED_S3_Transforms) {
+    
+library(tidyverse)
+library(geepack)
+library(broom)
+library(gtsummary)
+library(labelled)
+
+Sum_df = HI_ED_S3_Transforms
+# Turns all categorical or binary predictors into factor type data
+Sum_df$race_ethnicity <- as.factor(Sum_df$race_ethnicity)
+Sum_df$ED_then_Hospitalized <- as.factor(Sum_df$ED_then_Immediately_Hospitalized)
+Sum_df$COVID_patient_death_indicator <- as.factor(Sum_df$COVID_patient_death_indicator)
+
+# Labels the variable names 
+var_label(Sum_df) <- list(race_ethnicity="Race/Ethnicity", ED_then_Immediately_Hospitalized="Hospitalization after ED", COVID_patient_death_indicator="Patient Death")
+
+Sum_df <- Sum_df %>% select(race_ethnicity, ED_then_Immediately_Hospitalized, COVID_patient_death_indicator)
+print(Sum_df)
+levels(Sum_df$ED_then_Immediately_Hospitalized) <- list(N = "0", Y = "1")
+levels(Sum_df$COVID_patient_death_indicator) <- list(N = "0", Y = "1")
+
+#print(str(Sum_df))
+
+print(tbl_summary(Sum_df, by=race_ethnicity) %>% italicize_levels() %>% add_overall() %>% add_p() %>% bold_p())
+
+tbl <- tbl_summary(Sum_df, by=race_ethnicity) %>% italicize_levels() %>% add_overall() %>% add_p() %>% bold_p() %>% as_tibble()
+
+return(tbl)
+
+}
+```
+
+```{r}
+ED_OutcomeCounts(N3C_tags)
+```
+```{r}
+ED_OutcomeCounts(UVA_tags)
+```
+
+Calculates the average number of comorbidities in the temporally tagged UVA data
+```{r}
+comorb_N3C = N3C_tags[c("person_id","race_ethnicity","DiabetesComplicated_before_or_day_of_covid_indicator","HIVINFECTION_before_or_day_of_covid_indicator","CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator","MALIGNANTCANCER_before_or_day_of_covid_indicator","OBESITY_before_or_day_of_covid_indicator","CHRONICLUNGDISEASE_before_or_day_of_covid_indicator")]
+comorb_N3C = comorb_N3C %>%
+  rowwise()%>%
+  mutate(total_comorb = sum(c_across(3:8)))%>%
+  group_by(race_ethnicity)%>%
+  summarise(Comorbidities=mean(total_comorb))
+comorb_N3C["Tag"] = "UVA Data TD"
+comorb_N3C["race_ethnicity"]=c("Asian NH","Black/AA NH","White NH")
+comorb_N3C
+
+```
+
+Calculates the proportions of each comorbidity found in each racial/ethnic group for the temporally tagged UVA data
+```{r}
+prop_N3C = N3C_tags %>%
+  group_by(race_ethnicity) %>%
+  summarize(sum_diabetes= sum(DiabetesComplicated_before_or_day_of_covid_indicator),
+            sum_HIV = sum(HIVINFECTION_before_or_day_of_covid_indicator),
+            sum_CHF = sum(CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator),
+            sum_MC = sum(MALIGNANTCANCER_before_or_day_of_covid_indicator),
+            sum_obese = sum(OBESITY_before_or_day_of_covid_indicator),
+            sum_CLD = sum(CHRONICLUNGDISEASE_before_or_day_of_covid_indicator),
+            sum_Male = sum(sex=='Male'),
+            sum_Female = sum(sex=='Female'))
+prop_N3C[,2:9] = apply(prop_N3C[,2:9],2,function(x){x/sum(x)})
+prop_N3C["Tag"] = "UVA Data TD"
+prop_N3C
+```
+
+Sums the number patients for each comorbidity for both UVA Cohorts
+```{r}
+N3Csums <- N3C_tags %>%
+  summarize(sum_diabetes= sum(DiabetesComplicated_before_or_day_of_covid_indicator),
+            sum_HIV = sum(HIVINFECTION_before_or_day_of_covid_indicator),
+            sum_CHF = sum(CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator),
+            sum_MC = sum(MALIGNANTCANCER_before_or_day_of_covid_indicator),
+            sum_obese = sum(OBESITY_before_or_day_of_covid_indicator),
+            sum_CLD = sum(CHRONICLUNGDISEASE_before_or_day_of_covid_indicator),
+            sum_Male = sum(sex=='Male'),
+            sum_old = sum(age_at_covid>=65))
+UVAsums <- UVA_tags %>%
+  #summarize(cnt=n()) %>%
+  summarize(sum_diabetes = sum(DiabetesComplicated_before_or_day_of_covid_indicator),
+            sum_HIV = sum(HIVINFECTION_before_or_day_of_covid_indicator),
+            sum_CHF = sum(CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator),
+            sum_MC = sum(MALIGNANTCANCER_before_or_day_of_covid_indicator),
+            sum_obese = sum(OBESITY_before_or_day_of_covid_indicator),
+            sum_CLD = sum(CHRONICLUNGDISEASE_before_or_day_of_covid_indicator),
+            sum_Male = sum(sex=='Male'),
+            sum_old = sum(age_at_covid>=65))
+sum_total= rbind(UVAsums, N3Csums)
+sum_total
+```
+Looks at the counts of each racial/ethnic group for the temporally tagged UVA data
+```{r}
+N3C_tags %>%
+  count(race_ethnicity)
+```
+
+Calculates the average number of comorbidities in the principal diagnosis tagged UVA data
+```{r}
+comorb_UVA = UVA_tags[c("person_id","race_ethnicity","DiabetesComplicated_before_or_day_of_covid_indicator","HIVINFECTION_before_or_day_of_covid_indicator","CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator","MALIGNANTCANCER_before_or_day_of_covid_indicator","OBESITY_before_or_day_of_covid_indicator","CHRONICLUNGDISEASE_before_or_day_of_covid_indicator")]
+comorb_UVA = comorb_UVA %>%
+  rowwise()%>%
+  mutate(total_comorb = sum(c_across(3:8)))%>%
+  group_by(race_ethnicity)%>%
+  summarise(Comorbidities=mean(total_comorb))
+comorb_UVA["Tag"] = "UVA Data PD"
+comorb_UVA["race_ethnicity"]=c("Asian NH","Black/AA NH","White NH")
+comorb_UVA
+```
+
+Calculates the proportions of each comorbidity found in each racial/ethnic group for the principal diagnosis tagged UVA data
+```{r}
+prop_UVA = UVA_tags %>%
+  group_by(race_ethnicity) %>%
+  #summarize(cnt=n()) %>%
+  summarize(sum_diabetes = sum(DiabetesComplicated_before_or_day_of_covid_indicator),
+            sum_HIV = sum(HIVINFECTION_before_or_day_of_covid_indicator),
+            sum_CHF = sum(CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator),
+            sum_MC = sum(MALIGNANTCANCER_before_or_day_of_covid_indicator),
+            sum_obese = sum(OBESITY_before_or_day_of_covid_indicator),
+            sum_CLD = sum(CHRONICLUNGDISEASE_before_or_day_of_covid_indicator),
+            sum_Male = sum(sex=='Male'),
+            sum_Female = sum(sex=='Female'))
+prop_UVA[,2:9] = apply(prop_UVA[,2:9],2,function(x){x/sum(x)})
+prop_UVA["Tag"] =  "UVA Data PD"
+prop_UVA
+```
+
+Looks at the counts of each racial/ethnic group for the principal diagnosis tagged UVA data
+```{r}
+UVA_tags %>%
+  count(race_ethnicity)
+```
+
+Creating a graph that shows the average number of comorbidities for each cohort.
+```{r}
+combined = rbind(comorb_UVA,comorb_N3C)
+#bringing in data from the Enclave
+comorb_N3C2 <- data.frame(race_ethnicity= c("Asian NH","Black/AA NH","White NH"),Comorbidities=c(0.4081,0.7205,0.6804),Tag=c("Data From N3C Enclave","Data From N3C Enclave","Data From N3C Enclave"))
+combined = rbind(combined,comorb_N3C2)
+```
+
+```{r}
+#bar for each ethnic group
+#x axis = comorb
+#y axis = value
+combined$Tag <- factor(combined$Tag, levels=c("Data From N3C Enclave",
+                                                    "UVA Data TD",
+                                                    "UVA Data PD"))
+ggplot(data= combined, aes(x=race_ethnicity,y=Comorbidities, fill=Tag))+
+  geom_bar(stat="identity",position=position_dodge())+labs(x="Race/Ethnicity",y="Comorbidities Per Patient",fill="Cohort")+geom_text(aes(label=round(Comorbidities,digits=2)), position=position_dodge(width=0.9), vjust=-0.25)+theme_bw()+theme(axis.text=element_text(size=12),axis.title=element_text(size=14),legend.text=element_text(size=12),legend.title=element_text(size=12, face="bold"),legend.position = "top")
+```
+
+Creating a graph that shows the proportion of each racial/ethnic group in each cohort
+```{r}
+race_ethnicity_N3C = N3C_tags %>% count(race_ethnicity)
+race_ethnicity_N3C["Tag"] = "UVA Data TD"
+race_ethnicity_N3C["race_ethnicity"] = c("Asian NH","Black/AA NH","White NH")
+race_ethnicity_N3C = race_ethnicity_N3C %>% mutate(percent = n/sum(n))
+race_ethnicity_UVA = N3C_tags %>% count(race_ethnicity)
+race_ethnicity_UVA["Tag"] = "UVA Data PD"
+race_ethnicity_UVA["race_ethnicity"] = c("Asian NH","Black/AA NH","White NH")
+race_ethnicity_UVA = race_ethnicity_UVA %>% mutate(percent = n/sum(n))
+#bringing in data from the Enclave
+race_ethnicity_N3C2 <- data.frame(race_ethnicity= c("Asian NH","Black/AA NH","White NH"),n=c(19645,186571,475673),Tag=c("Data From N3C Enclave","Data From N3C Enclave","Data From N3C Enclave"))
+race_ethnicity_N3C2 = race_ethnicity_N3C2 %>% mutate(percent = n/sum(n))
+```
+
+```{r}
+N3C_tags %>% count(race_ethnicity)
+```
+
+
+```{r}
+combine1 = rbind(race_ethnicity_N3C,race_ethnicity_UVA)
+combine2 = rbind(combine1,race_ethnicity_N3C2)
+```
+
+```{r}
+combine2$Tag <- factor(combine2$Tag, levels=c("Data From N3C Enclave",
+                                                    "UVA Data TD",
+                                                    "UVA Data PD"))
+ggplot(data = combine2, aes(x=race_ethnicity,y=percent,fill=Tag))+
+  geom_bar(stat="identity",position=position_dodge())+geom_text(aes(label=round(percent,digits=2)), position=position_dodge(width=0.9), vjust=-0.25)+labs(x="Race/Ethnicity",y="Proportion",fill="Cohort")+theme_bw()+theme(axis.text=element_text(size=12),axis.title=element_text(size=14),legend.text=element_text(size=12),legend.title=element_text(size=12, face="bold"),legend.position = "top")
+```
+Creating graphs that show the proportion of each racial/ethnic group for each comorbidity.
+Any csv that is read in is from the N3C enclave. These are summary tables of patient data that were approved for release and use in our manuscript.
+```{r}
+age_N3C = N3C_tags[c("age_at_covid","race_ethnicity")]
+age_N3C["Tag"] = "UVA Data TD"
+age_UVA = UVA_tags[c("age_at_covid","race_ethnicity")]
+age_UVA["Tag"] = "UVA Data PD"
+```
+
+```{r}
+age_N3C2 = read.csv("age_N3C.csv")
+```
+
+```{r}
+all_comorb = UVA_tags[c("person_id","race_ethnicity","DiabetesComplicated_before_or_day_of_covid_indicator","HIVINFECTION_before_or_day_of_covid_indicator","CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator","MALIGNANTCANCER_before_or_day_of_covid_indicator","OBESITY_before_or_day_of_covid_indicator","CHRONICLUNGDISEASE_before_or_day_of_covid_indicator")]
+all_comorb["Tag"] = "UVA Data, PD"
+diabetes = all_comorb %>% filter(DiabetesComplicated_before_or_day_of_covid_indicator==1)
+all_comorb_N3C = N3C_tags[c("person_id","race_ethnicity","DiabetesComplicated_before_or_day_of_covid_indicator","HIVINFECTION_before_or_day_of_covid_indicator","CONGESTIVEHEARTFAILURE_before_or_day_of_covid_indicator","MALIGNANTCANCER_before_or_day_of_covid_indicator","OBESITY_before_or_day_of_covid_indicator","CHRONICLUNGDISEASE_before_or_day_of_covid_indicator")]
+all_comorb_N3C["Tag"] = "UVA Data, TD"
+diabetes_N3C = all_comorb_N3C %>% filter(DiabetesComplicated_before_or_day_of_covid_indicator==1) %>% group_by(race_ethnicity) %>% summarize(diabetes_sum = sum(DiabetesComplicated_before_or_day_of_covid_indicator))
+diabetes
+
+```
+
+
+```{r}
+prop_N3C2 <- read.csv("comorbs_N3C.csv")
+```
+```{r}
+prop_N3C2["Tag"] = "N3C Enclave"
+```
+
+
+
+```{r}
+prop_UVA["race_ethnicity"] = c("Asian NH","Black/AA NH","White NH")
+prop_N3C["race_ethnicity"] = c("Asian NH","Black/AA NH","White NH")
+prop_N3C2["race_ethnicity"] = c("Asian NH","Black/AA NH","White NH")
+combine1 = rbind(prop_UVA,prop_N3C)
+combine2 = rbind(combine1,prop_N3C2)
+graph_diabetes = ggplot(data=combine2,aes(x=Tag,y=sum_diabetes, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Patients with Diabetes",title="Patients with Diabetes By Cohort and Race/Ethnicity")
+graph_diabetes$labels$fill <- "Race/Ethnicity"
+graph_diabetes
+```
+```{r}
+graph_HIV = ggplot(data=combine2,aes(x=Tag,y=sum_HIV, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Patients with HIV",title="HIV Positive Patients By Cohort and Race/Ethnicity")
+graph_HIV$labels$fill <- "Race/Ethnicity"
+graph_HIV
+```
+```{r}
+graph_CHF = ggplot(data=combine2,aes(x=Tag,y=sum_CHF, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Patients with CHF",title="Patients with Congestive Heart Failure By Cohort and Race/Ethnicity")
+graph_CHF$labels$fill <- "Race/Ethnicity"
+graph_CHF
+```
+```{r}
+graph_MC = ggplot(data=combine2,aes(x=Tag,y=sum_MC, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Patients with Malignant Cancer",title="Patients with Malignant Cancer By Cohort and Race/Ethnicity")
+graph_MC$labels$fill <- "Race/Ethnicity"
+graph_MC
+```
+```{r}
+graph_obese = ggplot(data=combine2,aes(x=Tag,y=sum_obese, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Obese Patients",title="Obese Patients By Cohort and Race/Ethnicity")
+graph_obese$labels$fill <- "Race/Ethnicity"
+graph_obese
+```
+```{r}
+graph_CLD = ggplot(data=combine2,aes(x=Tag,y=sum_CLD, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Patients with Chronic Lung Disease",title="Patients with Chronic Lung Disease By Cohort and Race/Ethnicity")
+graph_CLD$labels$fill <- "Race/Ethnicity"
+graph_CLD
+```
+```{r}
+graph_CLD = ggplot(data=combine2,aes(x=Tag,y=sum_Male, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Male Patients",title="Male Patients By Cohort and Race/Ethnicity")
+graph_CLD$labels$fill <- "Race/Ethnicity"
+graph_CLD
+```
+```{r}
+graph_CLD = ggplot(data=combine2,aes(x=Tag,y=sum_Female, fill=race_ethnicity))+
+         geom_bar(stat="identity")+theme_bw()+labs(x="Cohort",y="Proportion of Female Patients",title="Female Patients By Cohort and Race/Ethnicity")
+graph_CLD$labels$fill <- "Race/Ethnicity"
+graph_CLD
+```
+```{r}
+age_N3C = N3C_tags[c("age_at_covid","race_ethnicity")]
+age_N3C["Cohort"] = "UVA Data TD"
+age_UVA = UVA_tags[c("age_at_covid","race_ethnicity")]
+age_UVA["Cohort"] = "UVA Data PD"
+age_overall = rbind(age_N3C,age_UVA)
+age_overall$race_ethnicity = replace(age_overall$race_ethnicity, age_overall$race_ethnicity=="Asian Non-Hispanic","Asian NH") 
+age_overall$race_ethnicity = replace(age_overall$race_ethnicity, age_overall$race_ethnicity=="Black or African American Non-Hispanic","Black/AA NH") 
+age_overall$race_ethnicity = replace(age_overall$race_ethnicity, age_overall$race_ethnicity=="White Non-Hispanic","White NH") 
+ggplot(age_overall,aes(x=race_ethnicity,y=age_at_covid,fill=Cohort))+geom_boxplot(outlier.colour="back",outlier.shape=16,outlier.size=2,notch=TRUE)+labs(x="Race/Ethnicity",y="Age at COVID Diagnosis",title="Distribution of Ages for UVA Data by Race")+theme_bw()
+```
+
+
+```{r}
+colnames(N3C_tags)
+```
+
+
+
+
+
